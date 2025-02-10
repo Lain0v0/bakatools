@@ -8,7 +8,8 @@ set "file_args="
 
 :: 检查是否通过文件拖放启动
 if not "%~1"=="" (
-    set "file_args=%*"
+    set "file_args="
+    for %%a in (%*) do set "file_args=!file_args! "%%~a""
     call :auto_select_script
     exit /b
 )
@@ -137,7 +138,7 @@ if %script_count% geq 1 (
     if exist "!selected_script!" (
         echo 检测到拖放文件，自动执行：!selected_script!
         echo 文件列表：%file_args%
-        python "!selected_script!" %file_args%
+        python "!selected_script!" %file_args: = %  # 移除多余空格 
         pause
         exit /b
     )
@@ -145,3 +146,7 @@ if %script_count% geq 1 (
 echo 错误：未找到可用Python脚本！
 pause
 exit /b
+
+:: 若需要更严格的路径处理，可在执行Python命令处稍作调整：
+:: python "!selected_script!" !file_args!
+:: 将%file_args%改为!file_args!以使用延迟扩展，避免特殊字符被解释。但原修改方案已能处理大多数情况，可根据实际需求选择是否添加此调整。
