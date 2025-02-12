@@ -76,15 +76,14 @@ def get_time_range(total_duration):
 
 def cut_video(input_path, start_time, end_time):
     """使用 ffmpeg 剪切视频"""
-    output_dir = os.path.join(os.path.dirname(input_path), "output")
+    base_dir = os.path.dirname(input_path)
+    video_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_dir = os.path.join(base_dir, video_name)  # 修改为文件名显示
     os.makedirs(output_dir, exist_ok=True)
-    
-    filename = os.path.splitext(os.path.basename(input_path))[0]
-    extension = os.path.splitext(input_path)[1]
     
     output_path = os.path.join(
         output_dir,
-        f"{filename}_clip{extension}"
+        f"{video_name}_cut.mp4"  # cut后缀
     )
     
     cmd = [

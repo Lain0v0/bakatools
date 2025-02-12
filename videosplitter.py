@@ -34,7 +34,7 @@ def validate_time(time_str):
         return False, None
 
 def get_time_points():
-    """获取用户输入的时间点"""
+    """获取用户输入的时间点（新增排序验证）"""
     print("请输入分割时间点（格式：HH:MM:SS，直接回车结束输入）")
     time_points = []
     
@@ -53,45 +53,59 @@ def get_time_points():
         except KeyboardInterrupt:
             print("\n操作已取消")
             sys.exit(1)
+    
+    # 新增：强制排序并验证时间顺序
+    sorted_points = sorted(time_points, key=lambda x: x[1])
+    for i in range(1, len(sorted_points)):
+        if sorted_points[i][1] <= sorted_points[i-1][1]:
+            print(f"错误：时间点必须递增！冲突发生在 {sorted_points[i-1][0]} 和 {sorted_points[i][0]}")
+            sys.exit(1)
             
-    return [tp[0] for tp in sorted(time_points, key=lambda x: x[1])]
+    return [tp[0] for tp in sorted_points]
 
 def split_video(input_path, time_points):
-    """使用 ffmpeg 分割视频"""
-    output_dir = os.path.join(os.path.dirname(input_path), "output")
+    """使用 ffmpeg 分割视频（关键修复）"""
+    base_dir = os.path.dirname(input_path)
+    video_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_dir = os.path.join(base_dir, video_name)  # 修改为文件名路径
     os.makedirs(output_dir, exist_ok=True)
     
     filename = os.path.splitext(os.path.basename(input_path))[0]
     extension = os.path.splitext(input_path)[1]
     
-    # 获取视频总时长
+    # 转换为秒数处理（新增）
+    time_seconds = []
+    for tp in time_points:
+        valid, sec = validate_time(tp)
+        time_seconds.append(sec)
     total_duration = get_video_duration(input_path)
-    hours, remainder = divmod(total_duration, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    end_time = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+    time_seconds.append(total_duration)
     
-    # 添加最后一个片段到视频结尾
-    time_points.append("end")
-    
-    start_time = "00:00:00"
-    for idx, end_time in enumerate(time_points, 1):
+    # 分割处理逻辑重构
+    for idx in range(len(time_seconds)):
+        start = time_seconds[idx-1] if idx > 0 else 0
+        end = time_seconds[idx]
+        
+        # 转换为时间字符串（新增）
+        def sec_to_time(seconds):
+            hours = int(seconds // 3600)
+            remainder = seconds % 3600
+            minutes = int(remainder // 60)
+            seconds = int(remainder % 60)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
         output_path = os.path.join(
             output_dir,
-            f"{filename}_part{idx}{extension}"
+            f"{filename}_part{idx+1}{extension}"
         )
         
+        # FFmpeg命令优化（关键修改）
         cmd = [
             "ffmpeg",
-            "-y",  # 覆盖输出文件
-            "-ss", start_time,
-            "-i", input_path
-        ]
-        
-        # 非最后一段需要添加-to参数
-        if end_time != "end":
-            cmd += ["-to", end_time]
-        
-        cmd += [
+            "-y",
+            "-ss", str(start),
+            "-to", str(end),
+            "-i", input_path,
             "-c:v", "copy",
             "-c:a", "copy",
             output_path
@@ -99,10 +113,9 @@ def split_video(input_path, time_points):
         
         try:
             subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL)
-            print(f"成功生成片段 {idx}: {start_time} → {end_time if end_time != 'end' else '视频结尾'}")
-            start_time = end_time
+            print(f"成功生成片段 {idx+1}: {sec_to_time(start)} → {sec_to_time(end)}")
         except subprocess.CalledProcessError:
-            print(f"错误：无法生成片段 {idx}，请检查 ffmpeg 是否安装")
+            print(f"错误：无法生成片段 {idx+1}")
             sys.exit(1)
 
 if __name__ == "__main__":
@@ -127,5 +140,5 @@ if __name__ == "__main__":
         sys.exit(0)
     
     split_video(video_path, time_points)
-    print("\n视频分割完成！输出目录：", os.path.join(os.path.dirname(video_path), "output"))
+    print("\n视频分割完成！输出目录：", os.path.join(os.path.dirname(video_path), "视频文件名"))
     input("按回车键退出...")

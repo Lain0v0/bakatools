@@ -20,11 +20,12 @@ def get_video_duration(input_path):
 
 def convert_to_gif(input_path):
     """转换视频为高质量GIF"""
-    output_dir = os.path.join(os.path.dirname(input_path), "gif_output")
+    base_dir = os.path.dirname(input_path)
+    video_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_dir = os.path.join(base_dir, video_name)  # 修改为文件名路径
     os.makedirs(output_dir, exist_ok=True)
     
-    filename = os.path.splitext(os.path.basename(input_path))[0]
-    output_path = os.path.join(output_dir, f"{filename}.gif")
+    output_path = os.path.join(output_dir, f"{video_name}.gif")
 
     # 交互参数设置
     duration = get_video_duration(input_path)

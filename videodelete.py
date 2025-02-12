@@ -118,7 +118,9 @@ def time_to_str(seconds):
 
 def process_video(input_path):
     """处理视频"""
-    output_dir = os.path.join(os.path.dirname(input_path), "processed")
+    base_dir = os.path.dirname(input_path)
+    video_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_dir = os.path.join(base_dir, video_name)  # 同名文件夹
     os.makedirs(output_dir, exist_ok=True)
 
     # 获取视频信息
@@ -180,7 +182,7 @@ def process_video(input_path):
             sys.exit(1)
 
     # 拼接视频
-    final_output = os.path.join(output_dir, "final_output.mp4")
+    final_output = os.path.join(output_dir, f"{video_name}_delete.mp4")
     
     # 生成文件列表
     list_file = os.path.join(temp_dir, "filelist.txt")
