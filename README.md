@@ -114,3 +114,50 @@ pip install ffmpeg-python
 批量下载 youtube 视频封面，在保存位置用 txt 格式建立文本文件，填入图片网址，每行一个，不需要符号分割。
 
 </details>
+
+## Anime
+
+### anime_sort
+
+对动漫资源进行文件分类整理，适配 emby 的命名规则。
+
+<details>
+
+以 VCB-Studio 的资源为例：
+
+```
+- anime_sort
+    - CM        # 电视放送广告
+    - IV        # 节目、采访、舞台活动、制作
+    - Menus     # BD/DVD 播放选择菜单
+    - OPED      # 无字 OP/ED
+    - PV        # 预告片
+```
+
+将`SPs`文件夹直接拖入`SPs通用整理.bat`，会自动根据文件夹内文件文件名关键词创建相关文件夹和元数据，分类放入对应的文件夹内，直接将分类文件夹移动至季文件夹同一目录下，例如：
+
+```
+- 碧蓝之海 (2018)
+    - Season 1 (2018) [UHA-WINGS@VCB-Studio] # 第一季文件
+    - PV        # 预告片
+```
+
+最终在 emby 资源库季末尾显示，效果如下：
+
+![emby预览](anime/anime_sort/preview.webp)
+
+如需要识别大小写，则在批处理程序中修改运行脚本文件为`sp_sort_Aa.py`。
+
+如是 VCB-Studio 的资源，可直接将下载整个文件夹拖入`VCB-Studio整理专用.bat`，脚本会显示对应动漫的 TMDB 链接，填入第几季、季年份、动漫中文名称后，在通用分类的基础上，还会对文件进行重命名以适配 emby：
+
+```
+- 碧蓝之海 (2018)
+    - [VCB-Studio] Grand Blue [Ma10p_1080p]
+        - [VCB-Studio] Grand Blue [01][Ma10p_1080p][x265_flac_aac].mkv
+-------------  ↓  -----------------
+- 碧蓝之海 (2018)
+    - Season 1 (2018) [VCB-Studio]
+        - 碧蓝之海 - S01E01 - 1080p.mkv
+```
+
+</details>
