@@ -11,7 +11,7 @@ SOURCE_FOLDER = r"M:\downloads\sort"
 DESTINATION_FOLDER = r"M:\hlinks"
 
 # 包含的文件扩展名（空列表表示包含所有类型）
-INCLUDE_EXTENSIONS = [".mkv", ".mp4", ".ass"]  # 示例：只处理这些文件类型
+INCLUDE_EXTENSIONS = [".mkv", ".mp4", ".mka", ".ass"]  # 示例：只处理这些文件类型
 
 # 排除的文件扩展名（空列表表示不排除任何类型）
 EXCLUDE_EXTENSIONS = []  # 示例：排除这些文件类型
