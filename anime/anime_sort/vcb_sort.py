@@ -114,17 +114,34 @@ def replace_episode_numbers_and_move(source_folder, season_folder_path, season_s
                     shutil.move(file_path, os.path.join(season_folder_path, file))
                     print(f"已移动文件到: {season_folder_path}")
 
-def rename_files(folder):
-    """重命名文件（原有功能）"""
+def rename_files(folder, is_sps_folder=False):
+    """重命名文件"""
     for root, dirs, files in os.walk(folder):
         for file in files:
             new_name = file
+            
+            # 如果是SPs文件夹中的文件，先将数字用"()"括起来
+            if is_sps_folder:
+                # 查找文件名中的所有数字部分并用"()"括起来
+                # 使用正则表达式匹配数字（可以是单个数字或数字序列）
+                # 但不匹配已经在括号内的数字
+                pattern = r'(\d+)'
+                # 先找出所有数字
+                numbers = re.findall(pattern, new_name)
+                
+                # 用括号括起每个数字
+                for num in numbers:
+                    # 检查这个数字是否已经被括号括起
+                    if f"({num})" not in new_name:
+                        new_name = new_name.replace(num, f"({num})")
+                print(f"已将数字用括号括起: {file} -> {new_name}")
+            
             # 添加后缀
-            if '1080p' in file:
+            if '1080p' in new_name:
                 new_name = re.sub(r'(\.[^.]+)$', r' - 1080p\1', new_name)
-            elif '720p' in file:
+            elif '720p' in new_name:
                 new_name = re.sub(r'(\.[^.]+)$', r' - 720p\1', new_name)
-            elif '2160p' in file:
+            elif '2160p' in new_name:
                 new_name = re.sub(r'(\.[^.]+)$', r' - 2160p\1', new_name)
 
             # 检测并替换 .JPSC 或 .SC 为 .zh-cn
@@ -174,7 +191,7 @@ def rename_files(folder):
          
             # 重命名文件
             os.rename(os.path.join(root, file), os.path.join(root, new_name))
-            print(f'Renamed {file} to {new_name}')
+            print(f'已重命名: {file} -> {new_name}')
 
 def copy_and_move_files(folder, file_keywords, target_folder_name):
     """移动文件到指定文件夹，如果目标文件夹不存在则从模板复制"""
@@ -206,10 +223,10 @@ def copy_and_move_files(folder, file_keywords, target_folder_name):
             if any(keyword.lower() in file.lower() for keyword in file_keywords):
                 source_file_path = os.path.join(root, file)
                 shutil.move(source_file_path, os.path.join(target_folder_path, file))
-                print(f'Moved {file} to {target_folder_path}')
+                print(f'已将 {file} 移动到 {target_folder_path}')
 
 def add_trailer_suffix_to_pv_folder(pv_folder_path):
-    """为PV文件夹中的mkv、mp4和ass文件添加-trailer后缀（原有功能）"""
+    """为PV文件夹中的mkv、mp4和ass文件添加-trailer后缀"""
     if not os.path.exists(pv_folder_path):
         return
     
@@ -226,12 +243,12 @@ def add_trailer_suffix_to_pv_folder(pv_folder_path):
                     
                     # 重命名文件
                     os.rename(file_path, new_path)
-                    print(f'Added trailer suffix: {filename} -> {new_name}')
+                    print(f'已添加trailer后缀: {filename} -> {new_name}')
 
 def process_season_folder(season_folder_path):
-    """处理Season文件夹（原有功能）"""
+    """处理Season文件夹"""
     print(f"开始处理Season文件夹: {season_folder_path}")
-    rename_files(season_folder_path)
+    rename_files(season_folder_path, is_sps_folder=False)
 
 def cleanup_empty_folders(folder_path):
     """清理空文件夹，除了season.nfo文件"""
@@ -252,11 +269,12 @@ def cleanup_empty_folders(folder_path):
                 print(f"已删除空文件夹: {dir_path}")
 
 def process_sps_folder(folder_path):
-    """处理SPs子文件夹（原有功能）"""
+    """处理SPs子文件夹"""
     sps_folder_path = os.path.join(folder_path, 'SPs')
     if os.path.exists(sps_folder_path) and os.path.isdir(sps_folder_path):
         print(f"开始处理SPs文件夹: {sps_folder_path}")
-        rename_files(sps_folder_path)
+        # 在这里传入is_sps_folder=True，以便在处理SPs文件夹时先将数字用括号括起来
+        rename_files(sps_folder_path, is_sps_folder=True)
         copy_and_move_files(sps_folder_path, ['PV', 'Preview'], 'PV')
         copy_and_move_files(sps_folder_path, ['Menu'], 'Menus')
         copy_and_move_files(sps_folder_path, ['NCOP', 'NCED'], 'OPED')
@@ -295,7 +313,7 @@ def process_folder(folder_path):
     # 7. 替换主文件夹下文件名中第二个[]内的数字，并移动到Season文件夹
     replace_episode_numbers_and_move(folder_path, season_folder_path, season_str)
     
-    # 8. 处理Season文件夹（原有功能）
+    # 8. 处理Season文件夹
     process_season_folder(season_folder_path)
     
     # 9. 处理SPs子文件夹
@@ -304,7 +322,7 @@ def process_folder(folder_path):
 def main():
     """主函数"""
     if len(sys.argv) < 2:
-        print("Usage: detect_and_move.py <source_folders>...")
+        print("用法: detect_and_move.py <源文件夹>...")
         sys.exit(1)
 
     source_folders = sys.argv[1:]
