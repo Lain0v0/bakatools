@@ -53,18 +53,15 @@ fltmc >nul 2>&1 || (
 
 单脚本批处理模板，修改运行脚本名称运行对应脚本。
 
-# 脚本
+# Anime
 
-各种小工具的简单使用说明，会慢慢根据需求补充。
+动漫相关脚本。
 
-## Anime
-
-### anime_sort
+## anime_sort
 
 对动漫资源进行文件分类整理，适配 emby 的命名规则。
 
 <details>
-
 
 以 VCB-Studio 的资源为例：
 
@@ -107,7 +104,7 @@ fltmc >nul 2>&1 || (
 
 </details>
 
-### subsetfonts
+## subsetfonts
 
 字幕字体子集化脚本，主要功能基于**wyzdwdz**大佬制作的[子集化工具](https://bbs.acgrip.com/thread-9897-1-1.html)，喜欢 GUI 版本可去下载。
 
@@ -127,7 +124,7 @@ fltmc >nul 2>&1 || (
 
 `字体转换匹配.bat`：如已经有许多同名但是格式不同的字体文件，可以使用该批处理程序将字体文件移入对应的分类目录下。原目录和目标目录需要在`matchfonts.py`中设定。
 
-#### 常见问题
+### 常见问题
 
 **1. 子集化时提示没有某些字体怎么办？**  
 获取字幕的地方一般会包括字体文件，找到缺少的字体放入字体库中，再更新字体数据库。
@@ -140,7 +137,7 @@ fltmc >nul 2>&1 || (
 
 </details>
 
-## Video
+# Video
 
 依赖于 ffmpeg，需要安装对应环境依赖：
 
@@ -152,48 +149,218 @@ pip install ffmpeg-python
 
 <details>
 
-### video_splitter
+## video_splitter
 
 视频无损分割，输入视频分割时间节点，即可切割（1 个节点分割成 2 份，2 个分割成 3 份，以此类推），输入完成后按两下 `Enter` 即可确认。
 
 配合 mpv 的复制当前时间快捷键可以更方便的使用。
 
-### video_cut
+## video_cut
 
 视频无损切片，输入开始时间和结束时间，输入完成后按两下 `Enter` 即可确认。
 
 配合 mpv 的复制当前时间快捷键可以更方便的使用。
 
-### video_delete
+## video_delete
 
 视频片段无损删除，输入片段前后时间点，切除不想要的视频片段，并将剩余的片段合并。因关键帧对齐，最终视频可能会比原视频稍短。
 
 配合 mpv 的复制当前时间快捷键可以更方便的使用。
 
-### video_merger
+## video_merger
 
 对相同录制参数的视频，按照从先到后的顺序合并为一个新的视频。
 
-### video_2mp4
+## video_2mp4
 
 无损转换视频为 mp4 格式，支持批量文件和文件夹混合输入。
 
-### video_2social
+## video_2social
 
 转换视频为普通清晰度的 mp4 格式，并转换为 30 帧，适合直接将视频分享到 qq 群、X 等社交媒体平台的情况。
 
-### video_2gif
+## video_2gif
 
 转换视频为普通清晰度的 gif 动图，适合直接将短视频做成动图分享到 qq 群等社交媒体平台的情况。
 
 建议配合 video2social 使用。
 
-### video_compress
+## video_compress
 
 通用的压制视频的脚本，不常用。
 
-### ytb_coverdl
+## ytb_coverdl
 
 批量下载 youtube 视频封面，在保存位置用 txt 格式建立文本文件，填入图片网址，每行一个，不需要符号分割。
+
+</details>
+
+# gallery
+
+一个通用资源画廊生成器，可以扫描目录结构并自动生成美观的HTML画廊页面。
+
+<details>
+
+## ✨ 功能特点
+
+- **自动扫描目录**：递归扫描文件夹，智能识别分类和项目
+- **封面图自动检测**：自动查找每个文件夹的封面图片（支持 folder.jpg、cover.png 等命名）
+- **多语言支持**：内置中文、英文、日文、韩文界面
+- **响应式设计**：适配桌面和移动设备
+- **暗色主题**：现代暗色界面，保护视力
+- **实时搜索**：快速搜索项目名称和分类
+- **分类筛选**：按分类快速浏览
+- **文件夹快速访问**：点击项目直接打开对应的系统文件夹
+
+## 📁 文件结构
+
+```
+资源目录/
+├── Category1/           # 一级分类
+│   ├── Item1/          # 项目文件夹
+│   │   ├── cover.jpg   # 封面图片（自动识别）
+│   │   ├── model.fbx
+│   │   └── textures/
+│   └── Item2/
+│       └── ...
+├── Category2/
+│   └── ...
+└── gallery.html        # 生成的画廊页面
+```
+
+## 🚀 快速开始
+
+### 方式1：仅生成HTML
+
+双击运行 `gallery_launcher.bat`，程序会自动：
+
+1. 扫描当前目录
+2. 生成 `gallery.html` 文件
+3. 完成后自动关闭
+
+### 方式2：生成并预览（推荐）
+
+双击运行 `quick_gallery.bat`，程序会自动：
+
+1. 扫描当前目录
+2. 生成 `gallery.html`
+3. 启动本地服务器（端口8000）
+4. 在浏览器中打开画廊页面
+
+### 方式3：命令行使用
+
+```bash
+# 基本使用（扫描当前目录）
+python gallery_generator.py
+
+# 扫描指定目录
+python gallery_generator.py "D:\资源目录"
+
+# 指定语言（en-US, zh-CN, ja-JP, ko-KR）
+python gallery_generator.py --lang zh-CN
+
+# 启动本地服务器预览
+python gallery_generator.py --serve --port 8080
+```
+
+## ⚙️ 系统要求
+
+- **Python 3.7+**：主程序依赖
+- **浏览器**：现代浏览器（Chrome、Edge、Firefox 等）
+
+## 📦 文件说明
+
+| 文件                   | 说明                       |
+| ---------------------- | -------------------------- |
+| `gallery_generator.py` | 主程序，扫描目录并生成HTML |
+| `gallery_launcher.bat` | Windows批处理，仅生成HTML  |
+| `quick_gallery.bat`    | Windows批处理，生成并预览  |
+| `gallery.html`         | 生成的画廊页面             |
+| `no_image.png`         | 默认封面图（自动生成）     |
+
+## 🖼️ 封面图命名
+
+程序会自动识别以下命名的图片作为封面：
+
+- `folder.jpg/png`
+- `cover.jpg/png`
+- `thumbnail.jpg/png`
+- `preview.jpg/png`
+- `thumb.jpg/png`
+- `image.jpg/png`
+
+如果找不到封面图，会显示默认占位符。
+
+## 🔧 高级选项
+
+### 命令行参数
+
+```bash
+python gallery_generator.py --help
+
+# 参数说明：
+# directory      : 要扫描的目录（默认当前目录）
+# --lang         : 界面语言，可选 en-US, zh-CN, ja-JP, ko-KR
+# --serve        : 启动本地服务器
+# --port         : 服务器端口（默认8000）
+# --output       : 输出文件名（默认gallery.html）
+```
+
+### 自定义配置
+
+可以修改 `gallery_generator.py` 中的以下部分来自定义：
+
+- CSS样式（修改 `generate_html` 函数中的样式部分）
+- 语言文本（修改 `translations` 字典）
+- 封面图识别规则（修改 `find_cover_image` 函数）
+
+## 🎨 界面特性
+
+1. **统计面板**：显示分类数量、项目总数、显示数量
+2. **分类标签**：点击标签快速筛选分类
+3. **实时搜索**：输入关键词实时筛选项目
+4. **语言切换**：右上角可切换界面语言
+5. **卡片悬停**：鼠标悬停显示详细信息
+6. **快捷操作**：
+   - `Ctrl+F` 或 `/`：聚焦搜索框
+   - `Esc`：清空搜索
+
+## 🔒 隐私与安全
+
+- 所有数据本地处理，不上传任何信息
+- 生成的HTML仅包含相对路径
+- 本地服务器仅在需要预览时启动
+
+## 🐛 故障排除
+
+### 问题：Python未找到
+
+**解决方案**：
+
+- 安装Python 3.7或更高版本
+- 确保Python已添加到系统PATH
+
+### 问题：没有找到分类
+
+**解决方案**：
+
+- 确保目录结构正确（主目录 → 分类文件夹 → 项目文件夹）
+- 确保分类文件夹内有项目文件夹
+
+### 问题：封面图不显示
+
+**解决方案**：
+
+- 确保图片文件名符合封面图命名规则
+- 确保图片格式支持（jpg、png、webp等）
+
+### 问题：浏览器无法打开
+
+**解决方案**：
+
+- 手动打开生成的 `gallery.html` 文件
+- 或使用 `--serve` 参数启动本地服务器
+
+**提示**：定期运行生成器可以保持画廊内容最新！
 
 </details>
