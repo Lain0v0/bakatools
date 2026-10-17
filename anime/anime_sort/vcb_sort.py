@@ -3,13 +3,204 @@ import shutil
 import sys
 import re
 
+# ============ 全局配置 ============
+
+VIDEO_EXTS = {'.mkv', '.mp4', '.avi', '.mov', '.flv', '.wmv',
+              '.webm', '.m4v', '.ts', '.m2ts'}
+
+KEYWORD_CATEGORY = {
+    'character pv': 'PV',
+    'web preview':  'PV',
+    'tv-spot':      'CM',
+    'music video':  'IV',
+    'nc-avant':     'OPED',
+    'nc-apart':     'OPED',
+    'nc-bpart':     'OPED',
+    'ncop':         'OPED',
+    'nced':         'OPED',
+    'preview':      'PV',
+    'trailer':      'PV',
+    'teaser':       'PV',
+    'spot':         'PV',
+    'menu':         'Menu',
+    'event':        'IV',
+    'interview':    'IV',
+    'making':       'IV',
+    'stage':        'IV',
+    'cm':           'CM',
+    'mv':           'IV',
+    'iv':           'IV',
+    'pv':           'PV',
+}
+
+SEASON_NFO_TOP = {
+    'PV': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[宣传片、预告、角色 PV 等]]></plot>
+  <outline><![CDATA[宣传片、预告、角色 PV 等]]></outline>
+  <lockdata>true</lockdata>
+  <title>PV</title>
+  <sorttitle>PV</sorttitle>
+  <seasonnumber>100</seasonnumber>
+</season>
+''',
+    'OPED': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[无字 OP/ED、无字开场片段等]]></plot>
+  <outline><![CDATA[无字 OP/ED、无字开场片段等]]></outline>
+  <lockdata>true</lockdata>
+  <title>OPED</title>
+  <sorttitle>OPED</sorttitle>
+  <seasonnumber>101</seasonnumber>
+</season>
+''',
+    'Menu': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[Menu BD/DVD 播放选择菜单]]></plot>
+  <outline><![CDATA[Menu BD/DVD 播放选择菜单]]></outline>
+  <lockdata>true</lockdata>
+  <dateadded>2024-10-31 14:08:04</dateadded>
+  <title>菜单</title>
+  <sorttitle>菜单</sorttitle>
+  <seasonnumber>102</seasonnumber>
+</season>
+''',
+    'CM': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[电视放送广告]]></plot>
+  <outline><![CDATA[电视放送广告]]></outline>
+  <lockdata>true</lockdata>
+  <title>广告</title>
+  <sorttitle>广告</sorttitle>
+  <seasonnumber>103</seasonnumber>
+</season>
+''',
+    'IV': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[访谈、舞台、制作花絮等三次元内容]]></plot>
+  <outline><![CDATA[访谈、舞台、制作花絮等三次元内容]]></outline>
+  <lockdata>true</lockdata>
+  <title>真人特典</title>
+  <sorttitle>真人特典</sorttitle>
+  <seasonnumber>104</seasonnumber>
+</season>
+''',
+    'Misc': '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<season>
+  <plot><![CDATA[其他剩余特典]]></plot>
+  <outline><![CDATA[其他剩余特典]]></outline>
+  <lockdata>true</lockdata>
+  <title>其他</title>
+  <sorttitle>其他</sorttitle>
+  <seasonnumber>105</seasonnumber>
+</season>
+''',
+}
+
+SEASON_NUM_MAP = {
+    'PV':  100,
+    'OPED': 101,
+    'Menu': 102,
+    'CM':  103,
+    'IV':  104,
+    'Misc': 105,
+}
+
+# 清晰度正则
+QUALITY_PATTERN = re.compile(r'(2160p|1080p|720p|480p)', re.IGNORECASE)
+
+
+# ============ 工具函数 ============
+
+def parse_selection(s, max_n):
+    """解析选择视频的输入"""
+    result = []
+    for part in re.split(r'[,\s]+', s.strip()):
+        if not part:
+            continue
+        if '-' in part:
+            a_s, b_s = part.split('-', 1)
+            a, b = int(a_s), int(b_s)
+            result.extend(range(a, b + 1))
+        else:
+            n = int(part)
+            if 1 <= n <= max_n:
+                result.append(n)
+            else:
+                for ch in part:
+                    if not ch.isdigit():
+                        raise ValueError(f"无效字符: {ch}")
+                    result.append(int(ch))
+    result = sorted(set(result))
+    if not result or any(x < 1 or x > max_n for x in result):
+        raise ValueError("选择超出范围")
+    return result
+
+
+def parse_ranges(s, max_n):
+    """解析区间划分输入"""
+    s = s.strip()
+    if s == '0':
+        return [(1, max_n)]
+    ranges = []
+    for part in re.split(r'[,\s]+', s):
+        if not part:
+            continue
+        if '-' in part:
+            a_s, b_s = part.split('-', 1)
+            a, b = int(a_s), int(b_s)
+        else:
+            a = b = int(part)
+        if a < 1 or b > max_n or a > b:
+            raise ValueError(f"区间 {part} 无效")
+        ranges.append((a, b))
+    ranges.sort(key=lambda x: x[0])
+    covered = set()
+    for a, b in ranges:
+        for i in range(a, b + 1):
+            if i in covered:
+                raise ValueError(f"区间 {a}-{b} 重叠")
+            covered.add(i)
+    if covered != set(range(1, max_n + 1)):
+        raise ValueError("区间未覆盖全部已选文件")
+    return ranges
+
+
+def extract_quality(filename):
+    m = QUALITY_PATTERN.search(filename)
+    return m.group(1) if m else ''
+
+
+def match_category(filename):
+    name_lower = filename.lower()
+    for kw, cat in sorted(KEYWORD_CATEGORY.items(), key=lambda x: -len(x[0])):
+        if kw in name_lower:
+            return cat
+    return None
+
+
+def add_quality_suffix_once(filename):
+    """
+    保证清晰度后缀（形如 ' - 1080p'）最多出现一次：
+      - 文件名含清晰度标记才处理
+      - 若扩展名前已有 ' - {quality}'，则不再添加
+    """
+    m = QUALITY_PATTERN.search(filename)
+    if not m:
+        return filename
+    quality = m.group(1)
+    name, ext = os.path.splitext(filename)
+    # 已在主体中存在 ' - 1080p' 形态的清晰度后缀，不再重复添加
+    if re.search(rf'\s-\s*{re.escape(quality)}(?![A-Za-z0-9])', name, re.IGNORECASE):
+        return filename
+    return f"{name} - {quality}{ext}"
+
+
+# ============ 基础重命名 ============
+
 def extract_folder_info(folder_path):
-    """提取文件夹名中的信息"""
     folder_name = os.path.basename(folder_path)
-    
-    # 提取第一个"] ["之间的内容A
-    pattern = r'\](.*?)\['
-    match = re.search(pattern, folder_name)
+    match = re.search(r'\](.*?)\[', folder_name)
     if match:
         content_a = match.group(1).strip()
         content_b = content_a.replace(' ', '+')
@@ -17,48 +208,36 @@ def extract_folder_info(folder_path):
         return content_a
     return None
 
+
 def get_user_input():
-    """获取用户输入"""
-    # 询问第几季
     while True:
-        season_input = input("请问是动漫的第几季？")
         try:
-            season_num = int(season_input)
+            season_num = int(input("请问是动漫的第几季？"))
             break
         except ValueError:
             print("请输入有效的数字")
-    
-    # 格式化季节数字
     season_str = str(season_num).zfill(2)
-    
-    # 询问发布年份
+
     while True:
-        year_input = input("请问该季是几几年发布？")
         try:
-            year_num = int(year_input)
-            if 1900 <= year_num <= 2100:  # 合理的年份范围
+            year_num = int(input("请问该季是几几年发布？"))
+            if 1900 <= year_num <= 2100:
                 break
-            else:
-                print("请输入合理的年份（1900-2100）")
+            print("请输入合理的年份（1900-2100）")
         except ValueError:
             print("请输入有效的年份")
-    
-    # 询问中文名
+
     chinese_name = input("动漫的中文名叫什么？")
-    
     return season_str, year_num, chinese_name
 
+
 def extract_first_bracket_content(folder_path):
-    """提取文件夹名中第一个[]内的内容"""
     folder_name = os.path.basename(folder_path)
-    pattern = r'\[(.*?)\]'
-    match = re.search(pattern, folder_name)
-    if match:
-        return match.group(1)
-    return ""
+    match = re.search(r'\[(.*?)\]', folder_name)
+    return match.group(1) if match else ""
+
 
 def create_season_folder(folder_path, season_str, year_num, first_bracket_content):
-    """创建Season文件夹"""
     season_folder_name = f"Season {season_str} ({year_num}) [{first_bracket_content}]"
     season_folder_path = os.path.join(folder_path, season_folder_name)
     if not os.path.exists(season_folder_path):
@@ -66,270 +245,393 @@ def create_season_folder(folder_path, season_str, year_num, first_bracket_conten
         print(f"已创建文件夹: {season_folder_name}")
     return season_folder_path
 
+
 def replace_chinese_name_in_files(folder_path, chinese_name):
-    """将所有文件中的内容G替换为中文名"""
     for root, dirs, files in os.walk(folder_path):
         for file in files:
-            # 提取第一个"] ["之间的内容G
-            pattern = r'\](.*?)\['
-            match = re.search(pattern, file)
+            match = re.search(r'\](.*?)\[', file)
             if match:
                 content_g = match.group(1).strip()
                 new_filename = file.replace(content_g, f" {chinese_name} ")
                 old_path = os.path.join(root, file)
                 new_path = os.path.join(root, new_filename)
-                os.rename(old_path, new_path)
-                print(f"已重命名: {file} -> {new_filename}")
+                if os.path.exists(new_path):
+                    continue
+                try:
+                    os.rename(old_path, new_path)
+                    print(f"已重命名: {file} -> {new_filename}")
+                except OSError as e:
+                    print(f"重命名失败: {file} -> {new_filename}: {e}")
+
 
 def replace_episode_numbers_and_move(source_folder, season_folder_path, season_str):
-    """替换主文件夹下文件名中第二个[]内的数字，并移动到Season文件夹"""
-    # 只处理主文件夹下的文件，不包括子文件夹
     for file in os.listdir(source_folder):
         file_path = os.path.join(source_folder, file)
-        if os.path.isfile(file_path):
-            # 找到所有[]的内容
-            pattern = r'\[(.*?)\]'
-            matches = re.findall(pattern, file)
-            if len(matches) >= 2:
-                # 提取第二个[]内的内容
-                second_bracket = matches[1]
-                # 检查是否为纯数字
-                if second_bracket.isdigit():
-                    number_h = second_bracket
-                    replacement = f"- S{season_str}E{number_h.zfill(2)}"
-                    new_filename = re.sub(r'\[(.*?)\]', replacement, file, count=2)
-                    new_filename = new_filename.replace(replacement, f"[{replacement}]", 1)
-                    
-                    # 重命名文件
-                    old_path = os.path.join(source_folder, file)
-                    new_path = os.path.join(source_folder, new_filename)
-                    os.rename(old_path, new_path)
-                    print(f"已替换数字: {file} -> {new_filename}")
-                    
-                    # 移动文件到Season文件夹
-                    shutil.move(new_path, os.path.join(season_folder_path, new_filename))
-                    print(f"已移动文件到: {season_folder_path}")
-                else:
-                    # 如果不是纯数字，直接移动到Season文件夹
-                    shutil.move(file_path, os.path.join(season_folder_path, file))
-                    print(f"已移动文件到: {season_folder_path}")
+        if not os.path.isfile(file_path):
+            continue
+        matches = re.findall(r'\[(.*?)\]', file)
+        if len(matches) >= 2:
+            second_bracket = matches[1]
+            if second_bracket.isdigit():
+                number_h = second_bracket
+                replacement = f"- S{season_str}E{number_h.zfill(2)}"
+                new_filename = re.sub(r'\[(.*?)\]', replacement, file, count=2)
+                new_filename = new_filename.replace(replacement, f"[{replacement}]", 1)
 
-def rename_files(folder, is_sps_folder=False):
-    """重命名文件"""
+                old_path = os.path.join(source_folder, file)
+                new_path = os.path.join(source_folder, new_filename)
+                os.rename(old_path, new_path)
+                print(f"已替换数字: {file} -> {new_filename}")
+
+                shutil.move(new_path, os.path.join(season_folder_path, new_filename))
+                print(f"已移动文件到: {season_folder_path}")
+            else:
+                shutil.move(file_path, os.path.join(season_folder_path, file))
+                print(f"已移动文件到: {season_folder_path}")
+
+
+def rename_files(folder):
     for root, dirs, files in os.walk(folder):
-        for file in files:
+        for file in list(files):
             new_name = file
-            
-            # 如果是SPs文件夹中的文件，先将数字用"()"括起来
-            if is_sps_folder:
-                # 查找文件名中的所有数字部分并用"()"括起来
-                # 使用正则表达式匹配数字（可以是单个数字或数字序列）
-                # 但不匹配已经在括号内的数字
-                pattern = r'(\d+)'
-                # 先找出所有数字
-                numbers = re.findall(pattern, new_name)
-                
-                # 用括号括起每个数字
-                for num in numbers:
-                    # 检查这个数字是否已经被括号括起
-                    if f"({num})" not in new_name:
-                        new_name = new_name.replace(num, f"({num})")
-                print(f"已将数字用括号括起: {file} -> {new_name}")
-            
-            # 添加后缀
-            if '1080p' in new_name:
-                new_name = re.sub(r'(\.[^.]+)$', r' - 1080p\1', new_name)
-            elif '720p' in new_name:
-                new_name = re.sub(r'(\.[^.]+)$', r' - 720p\1', new_name)
-            elif '2160p' in new_name:
-                new_name = re.sub(r'(\.[^.]+)$', r' - 2160p\1', new_name)
 
-            # 检测并替换 .JPSC 或 .SC 为 .zh-cn
+            # 清晰度后缀（只加一次）
+            new_name = add_quality_suffix_once(new_name)
+
+            # 语言标记
             new_name = new_name.replace('.JPSC', '.zh-cn').replace('.SC', '.zh-cn').replace('.CHS', '.zh-cn')
             new_name = new_name.replace('.jpsc', '.zh-cn').replace('.sc', '.zh-cn').replace('.chs', '.zh-cn')
-            
-            # 检测并替换 .JPTC 或 .TC 为 .zh-tw
             new_name = new_name.replace('.JPTC', '.zh-tw').replace('.TC', '.zh-tw').replace('.CHT', '.zh-tw')
             new_name = new_name.replace('.jptc', '.zh-tw').replace('.tc', '.zh-tw').replace('.cht', '.zh-tw')
-            
-            # 去除第一个和最后两个[]内的内容
+
+            # 去除首尾括号
             new_name = re.sub(r'\[.*?\]', '', new_name, count=1)
             new_name = re.sub(r'(.*)\[.*?\](.*)\[.*?\](.*)', r'\1\2\3', new_name)
-
-            # 去除所有 [ 和 ]
             new_name = new_name.replace('[', '').replace(']', '')
-
-            # 将两个连续的空格改为单个空格
             new_name = re.sub(r'\s\s+', ' ', new_name).strip()
 
-            # 将.zh-cn和.zh-tw移动到文件名末尾，文件扩展名之前
+            # 语言标记移到扩展名前
             if '.zh-cn' in new_name or '.zh-tw' in new_name:
-                # 分离文件名和扩展名
                 name_without_ext, ext = os.path.splitext(new_name)
-                
-                # 检查是否已经有语言标记在末尾
-                if name_without_ext.endswith('.zh-cn') or name_without_ext.endswith('.zh-tw'):
-                    # 已经在末尾，不需要移动
-                    pass
-                else:
-                    # 查找语言标记的位置
-                    zh_cn_pos = name_without_ext.find('.zh-cn')
-                    zh_tw_pos = name_without_ext.find('.zh-tw')
-                    
-                    if zh_cn_pos != -1:
-                        # 移除语言标记
+                if not (name_without_ext.endswith('.zh-cn') or name_without_ext.endswith('.zh-tw')):
+                    if '.zh-cn' in name_without_ext:
                         name_without_zh = name_without_ext.replace('.zh-cn', '')
-                        # 将语言标记添加到末尾
-                        new_name_without_ext = f"{name_without_zh}.zh-cn"
-                        new_name = f"{new_name_without_ext}{ext}"
-                    elif zh_tw_pos != -1:
-                        # 移除语言标记
+                        new_name = f"{name_without_zh}.zh-cn{ext}"
+                    elif '.zh-tw' in name_without_ext:
                         name_without_zh = name_without_ext.replace('.zh-tw', '')
-                        # 将语言标记添加到末尾
-                        new_name_without_ext = f"{name_without_zh}.zh-tw"
-                        new_name = f"{new_name_without_ext}{ext}"
-         
-            # 重命名文件
-            os.rename(os.path.join(root, file), os.path.join(root, new_name))
-            print(f'已重命名: {file} -> {new_name}')
+                        new_name = f"{name_without_zh}.zh-tw{ext}"
 
-def copy_and_move_files(folder, file_keywords, target_folder_name):
-    """移动文件到指定文件夹，如果目标文件夹不存在则从模板复制"""
-    # 获取脚本所在目录的路径
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 构建目标文件夹路径和模板文件夹路径
-    target_folder_path = os.path.join(folder, target_folder_name)
-    template_folder_path = os.path.join(script_dir, target_folder_name)
-    
-    # 如果目标文件夹不存在，从模板文件夹复制整个结构
-    if not os.path.exists(target_folder_path):
-        if os.path.exists(template_folder_path) and os.path.isdir(template_folder_path):
-            # 复制整个模板文件夹及其内容
-            shutil.copytree(template_folder_path, target_folder_path)
-            print(f"已从模板复制文件夹: {target_folder_name}")
-        else:
-            # 如果模板文件夹不存在，只创建空的目标文件夹
-            os.makedirs(target_folder_path)
-            print(f"已创建空文件夹: {target_folder_name}")
-    
-    # 然后移动匹配的文件
-    for root, dirs, files in os.walk(folder):
-        for file in files:
-            # 跳过目标文件夹中的文件，避免重复移动
-            if root.startswith(target_folder_path):
+            old_path = os.path.join(root, file)
+            new_path = os.path.join(root, new_name)
+            if old_path == new_path:
                 continue
-                
-            if any(keyword.lower() in file.lower() for keyword in file_keywords):
-                source_file_path = os.path.join(root, file)
-                shutil.move(source_file_path, os.path.join(target_folder_path, file))
-                print(f'已将 {file} 移动到 {target_folder_path}')
+            try:
+                os.rename(old_path, new_path)
+                print(f'已重命名: {file} -> {new_name}')
+            except OSError as e:
+                print(f'重命名失败: {file} -> {new_name}: {e}')
 
-def add_trailer_suffix_to_pv_folder(pv_folder_path):
-    """为PV文件夹中的mkv、mp4和ass文件添加-trailer后缀"""
-    if not os.path.exists(pv_folder_path):
-        return
-    
-    for filename in os.listdir(pv_folder_path):
-        file_path = os.path.join(pv_folder_path, filename)
-        if os.path.isfile(file_path):
-            # 检查文件扩展名
-            name, ext = os.path.splitext(filename)
-            if ext.lower() in ['.mkv', '.mp4', '.ass']:
-                # 检查是否已经包含-trailer后缀
-                if not name.endswith('-trailer'):
-                    new_name = f"{name}-trailer{ext}"
-                    new_path = os.path.join(pv_folder_path, new_name)
-                    
-                    # 重命名文件
-                    os.rename(file_path, new_path)
-                    print(f'已添加trailer后缀: {filename} -> {new_name}')
 
 def process_season_folder(season_folder_path):
-    """处理Season文件夹"""
     print(f"开始处理Season文件夹: {season_folder_path}")
-    rename_files(season_folder_path, is_sps_folder=False)
+    rename_files(season_folder_path)
 
-def cleanup_empty_folders(folder_path):
-    """清理空文件夹，除了season.nfo文件"""
+
+# ============ SPs 特别篇处理 ============
+
+def rename_special_files(sps_dir, video_filename, chinese_name, episode_num, target_dir):
+    video_base, video_ext = os.path.splitext(video_filename)
+    quality = extract_quality(video_base)
+    quality_part = f" - {quality}" if quality else ""
+    new_base = f"{chinese_name} - S00E{episode_num:02d}{quality_part}"
+
+    files_to_move = []
+    for f in sorted(os.listdir(sps_dir)):
+        src = os.path.join(sps_dir, f)
+        if not os.path.isfile(src):
+            continue
+        if f == video_filename:
+            files_to_move.append((f, video_ext))
+        elif f.startswith(video_base + '.'):
+            suffix = f[len(video_base):]
+            files_to_move.append((f, suffix))
+
+    for old_name, suffix in files_to_move:
+        new_name = new_base + suffix
+        src = os.path.join(sps_dir, old_name)
+        dst = os.path.join(target_dir, new_name)
+        if os.path.exists(dst):
+            print(f"  目标已存在，跳过: {new_name}")
+            continue
+        shutil.move(src, dst)
+        print(f"  已整理: {old_name} -> {new_name}")
+
+
+def process_sp_specials(sps_folder_path, chinese_name):
+    print("\n===== 特别篇处理 =====")
+    video_files = [
+        f for f in sorted(os.listdir(sps_folder_path))
+        if os.path.isfile(os.path.join(sps_folder_path, f))
+        and os.path.splitext(f)[1].lower() in VIDEO_EXTS
+    ]
+    if not video_files:
+        print("SPs 根目录没有视频文件，跳过特别篇处理")
+        return
+
+    print("SPs 根目录中的视频文件：")
+    for i, vf in enumerate(video_files, 1):
+        print(f"  {i}. {vf}")
+
+    while True:
+        s = input("请选择对应 TMDB 特别篇的文件（如 1 / 1,2,5,6,8 / 1-10；输入 0 表示无特别篇跳过）：").strip()
+        if s == '0':
+            print("跳过特别篇处理")
+            return
+        try:
+            selected_indices = parse_selection(s, len(video_files))
+            break
+        except Exception as e:
+            print(f"输入有误: {e}，请重新输入")
+
+    selected_files = [video_files[i - 1] for i in selected_indices]
+    print("\n已选择的文件：")
+    for i, f in enumerate(selected_files, 1):
+        print(f"  {i}. {f}")
+
+    while True:
+        s = input(f"请划分区间（共 {len(selected_files)} 个文件，如 1-4,5-8；输入 0 表示全部为一个区间）：").strip()
+        try:
+            ranges = parse_ranges(s, len(selected_files))
+            break
+        except Exception as e:
+            print(f"输入有误: {e}，请重新输入")
+
+    while True:
+        s = input(f"请输入 {len(ranges)} 个区间的起始集数（如 1,8,20）：").strip()
+        try:
+            starts = [int(x) for x in re.split(r'[,\s]+', s.strip()) if x]
+            if len(starts) != len(ranges):
+                raise ValueError(f"需要 {len(ranges)} 个数字")
+            if any(x < 0 for x in starts):
+                raise ValueError("集数不能为负")
+            break
+        except Exception as e:
+            print(f"输入有误: {e}，请重新输入")
+
+    file_episodes = {}
+    for (a, b), ep_start in zip(ranges, starts):
+        ep = ep_start
+        for idx in range(a, b + 1):
+            file_episodes[idx] = ep
+            ep += 1
+
+    season00_path = os.path.join(sps_folder_path, 'Season 00')
+    os.makedirs(season00_path, exist_ok=True)
+
+    for idx, vf in enumerate(selected_files, 1):
+        ep = file_episodes.get(idx)
+        if ep is None:
+            print(f"警告: 文件 {vf} 未分配集数，跳过")
+            continue
+        print(f"\n处理: {vf} -> S00E{ep:02d}")
+        rename_special_files(sps_folder_path, vf, chinese_name, ep, season00_path)
+
+    print(f"\n特别篇已整理到: {season00_path}")
+
+
+# ============ SPs 剩余分类 ============
+
+def categorize_remaining_files(sps_folder_path):
+    target_cats = {'PV', 'Menu', 'OPED', 'IV', 'CM', 'Misc', 'Season 00'}
+
+    all_files = []
+    for root, dirs, files in os.walk(sps_folder_path):
+        if root == sps_folder_path:
+            dirs[:] = [d for d in dirs if d not in target_cats]
+        for f in files:
+            all_files.append(os.path.join(root, f))
+
+    for fp in all_files:
+        if not os.path.isfile(fp):
+            continue
+        fn = os.path.basename(fp)
+        cat = match_category(fn) or 'Misc'
+        target_dir = os.path.join(sps_folder_path, cat)
+        os.makedirs(target_dir, exist_ok=True)
+        dst = os.path.join(target_dir, fn)
+        if os.path.exists(dst):
+            print(f"已存在，跳过: {fn}")
+            continue
+        shutil.move(fp, dst)
+        print(f"已分类: {fn} -> {cat}")
+
+
+# ============ 为 PV 加 -trailer ============
+
+def add_trailer_suffix_to_pv_folder(pv_folder_path):
+    if not os.path.exists(pv_folder_path):
+        return
+    for filename in os.listdir(pv_folder_path):
+        fp = os.path.join(pv_folder_path, filename)
+        if not os.path.isfile(fp):
+            continue
+        name, ext = os.path.splitext(filename)
+        # 只处理含 PV 关键字的文件
+        if 'pv' not in name.lower():
+            continue
+        if name.endswith('-trailer'):
+            continue
+        new_name = f"{name}-trailer{ext}"
+        os.rename(fp, os.path.join(pv_folder_path, new_name))
+        print(f"已添加trailer后缀: {filename} -> {new_name}")
+
+
+# ============ 清理空文件夹 ============
+
+def remove_empty_dirs(folder_path):
     for root, dirs, files in os.walk(folder_path, topdown=False):
-        for dir_name in dirs:
-            dir_path = os.path.join(root, dir_name)
-            # 检查文件夹是否只包含season.nfo文件
-            contents = os.listdir(dir_path)
-            if len(contents) == 1 and contents[0] == 'season.nfo':
-                # 删除season.nfo文件
-                season_nfo_path = os.path.join(dir_path, 'season.nfo')
-                os.remove(season_nfo_path)
-                print(f"已删除文件: {season_nfo_path}")
-            
-            # 再次检查文件夹是否为空
-            if not os.listdir(dir_path):
-                os.rmdir(dir_path)
-                print(f"已删除空文件夹: {dir_path}")
+        for d in dirs:
+            dp = os.path.join(root, d)
+            try:
+                if not os.listdir(dp):
+                    os.rmdir(dp)
+                    print(f"已删除空文件夹: {dp}")
+            except FileNotFoundError:
+                pass
 
-def process_sps_folder(folder_path):
-    """处理SPs子文件夹"""
+
+# ============ NFO 写入 ============
+
+def add_season_nfo_files(sps_folder_path):
+    for cat, content in SEASON_NFO_TOP.items():
+        cat_path = os.path.join(sps_folder_path, cat)
+        if not os.path.isdir(cat_path) or not os.listdir(cat_path):
+            continue
+        nfo_path = os.path.join(cat_path, 'season.nfo')
+        with open(nfo_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"已写入: {nfo_path}")
+
+
+def make_episode_nfo(title, season_num):
+    return (
+        '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
+        '<episodedetails>\n'
+        '  <plot />\n'
+        '  <outline />\n'
+        '  <lockdata>false</lockdata>\n'
+        f'  <title>{title}</title>\n'
+        f'  <sorttitle>{title}</sorttitle>\n'
+        f'  <season>{season_num}</season>\n'
+        '\n'
+        '</episodedetails>\n'
+    )
+
+
+def add_episode_nfo_files(sps_folder_path):
+    for cat, season_num in SEASON_NUM_MAP.items():
+        cat_path = os.path.join(sps_folder_path, cat)
+        if not os.path.isdir(cat_path):
+            continue
+        for filename in sorted(os.listdir(cat_path)):
+            fp = os.path.join(cat_path, filename)
+            if not os.path.isfile(fp):
+                continue
+            name, ext = os.path.splitext(filename)
+            if ext.lower() not in VIDEO_EXTS:
+                continue
+            nfo_path = os.path.join(cat_path, f"{name}.nfo")
+            with open(nfo_path, 'w', encoding='utf-8') as f:
+                f.write(make_episode_nfo(name, season_num))
+            print(f"已写入: {nfo_path}")
+
+
+# ============ SPs 内容上移 ============
+
+def move_sps_contents_up(sps_folder_path, folder_path):
+    """把 SPs 里所有内容移到上级，返回冲突项"""
+    conflicts = []
+    for item in sorted(os.listdir(sps_folder_path)):
+        src = os.path.join(sps_folder_path, item)
+        dst = os.path.join(folder_path, item)
+        if os.path.exists(dst):
+            conflicts.append(item)
+            print(f"目标已存在，跳过: {dst}")
+            continue
+        shutil.move(src, dst)
+        print(f"已移动到上级: {item}")
+    return conflicts
+
+
+# ============ SPs 总流程 ============
+
+def process_sps_folder(folder_path, chinese_name):
     sps_folder_path = os.path.join(folder_path, 'SPs')
-    if os.path.exists(sps_folder_path) and os.path.isdir(sps_folder_path):
-        print(f"开始处理SPs文件夹: {sps_folder_path}")
-        # 在这里传入is_sps_folder=True，以便在处理SPs文件夹时先将数字用括号括起来
-        rename_files(sps_folder_path, is_sps_folder=True)
-        copy_and_move_files(sps_folder_path, ['PV', 'Preview'], 'PV')
-        copy_and_move_files(sps_folder_path, ['Menu'], 'Menus')
-        copy_and_move_files(sps_folder_path, ['NCOP', 'NCED'], 'OPED')
-        copy_and_move_files(sps_folder_path, ['IV', 'EVENT'], 'IV')
-        copy_and_move_files(sps_folder_path, ['CM'], 'CM')
+    if not (os.path.exists(sps_folder_path) and os.path.isdir(sps_folder_path)):
+        print("未找到 SPs 文件夹，跳过处理")
+        return
 
-        # 在所有移动操作完成后，为PV文件夹中的文件添加-trailer后缀
-        pv_folder_path = os.path.join(sps_folder_path, 'PV')
-        add_trailer_suffix_to_pv_folder(pv_folder_path)
-        
-        # 清理空文件夹（包括只包含season.nfo的文件夹）
-        cleanup_empty_folders(sps_folder_path)
-        
-        # 检查SPs文件夹是否为空，如果为空则删除
-        if not os.listdir(sps_folder_path):
-            os.rmdir(sps_folder_path)
-            print(f"已删除空的SPs文件夹: {sps_folder_path}")
-    else:
-        print("未找到SPs文件夹，跳过处理")
+    print(f"\n开始处理 SPs 文件夹: {sps_folder_path}")
+
+    # 1) 通用重命名（清晰度后缀保证只有一个）
+    rename_files(sps_folder_path)
+
+    # 2) 处理特别篇
+    process_sp_specials(sps_folder_path, chinese_name)
+
+    # 3) 剩余文件分类
+    categorize_remaining_files(sps_folder_path)
+
+    # 4) PV 文件夹含 PV 关键字文件加 -trailer
+    add_trailer_suffix_to_pv_folder(os.path.join(sps_folder_path, 'PV'))
+
+    # 5) 删除空文件夹
+    remove_empty_dirs(sps_folder_path)
+
+    # 6) season.nfo
+    add_season_nfo_files(sps_folder_path)
+
+    # 7) episodedetails.nfo
+    add_episode_nfo_files(sps_folder_path)
+
+    # 8) 全部上移到上级
+    conflicts = move_sps_contents_up(sps_folder_path, folder_path)
+
+    # 9) 无冲突时删除 SPs，否则保留提示
+    if conflicts:
+        print(f"\n⚠️ 存在同名的目标，SPs 未删除，请手动检查: {sps_folder_path}")
+        return
+
+    if os.path.exists(sps_folder_path):
+        remove_empty_dirs(sps_folder_path)
+    if os.path.exists(sps_folder_path):
+        shutil.rmtree(sps_folder_path)
+        print(f"已删除 SPs 文件夹: {sps_folder_path}")
+
+
+# ============ 主流程 ============
 
 def process_folder(folder_path):
-    """处理单个文件夹"""
-    # 1. 提取文件夹名信息并输出TMDB链接
-    content_a = extract_folder_info(folder_path)
-    
-    # 2-4. 获取用户输入
+    extract_folder_info(folder_path)
     season_str, year_num, chinese_name = get_user_input()
-    
-    # 5. 提取第一个[]内的内容F并创建Season文件夹
+
     first_bracket_content = extract_first_bracket_content(folder_path)
     season_folder_path = create_season_folder(folder_path, season_str, year_num, first_bracket_content)
-    
-    # 6. 替换所有文件中第一个"] ["内的内容G为中文名
+
     replace_chinese_name_in_files(folder_path, chinese_name)
-    
-    # 7. 替换主文件夹下文件名中第二个[]内的数字，并移动到Season文件夹
     replace_episode_numbers_and_move(folder_path, season_folder_path, season_str)
-    
-    # 8. 处理Season文件夹
     process_season_folder(season_folder_path)
-    
-    # 9. 处理SPs子文件夹
-    process_sps_folder(folder_path)
+    process_sps_folder(folder_path, chinese_name)
+
 
 def main():
-    """主函数"""
     if len(sys.argv) < 2:
-        print("用法: detect_and_move.py <源文件夹>...")
+        print("用法: vcb_sort.py <源文件夹>...")
         sys.exit(1)
 
-    source_folders = sys.argv[1:]
-    
-    # 只处理第一个拖入的文件夹
-    if source_folders:
-        process_folder(source_folders[0])
+    if sys.argv[1:]:
+        process_folder(sys.argv[1])
+
 
 if __name__ == "__main__":
     main()
